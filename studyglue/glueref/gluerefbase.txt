@@ -1,0 +1,1185 @@
+    1. 20130724 air glue.sas annotated code test data output superdata
+    1. meta:
+      1. glue.sas code below was copied on 20130724 from 
+        1. C:/CVSProjects/CSSCScoreReporting/OGT Fall 2012/code/development/superdata/glue.sas
+        2. NB: some empty lines were squashed, so line numbers may be akimbo.
+        3. I manually insert list item with /**/ in here at times to simulate blank lines to  adjust item/line numbering in this entry.
+      2. -glue.sas march 2013 output data
+        1. location H:\share\Ohio Graduation Tests\Technical\2013 March\ScoreReports\SuperData
+      3. test data: 
+        1. C:\Users\temp_rphillips\testdata\OGT_2012_Spring
+        2. inputs:
+          1. ogt_csv
+        3. outputs:
+          1. student.csv, student-dummy.csv, ogt_galludet.csv
+      4. test code : python code on air desktop 
+        1. mostly in python notebooks like 20130812_glue...*
+    2. ISSUE: Should create a python version of  Propercase 
+        1. - it exists in ScoreReportMacros/UnitTested/lib_properCase.sas, and a ref exists in python code that it is genned by prep_sqlserver, but no sign of that in Mercurial using Eclipse ctrl-h on rev 375.
+        2. - CONCLUSION - Yes..
+        3. UPDATE - we do have a propcase.py - but I had missed it looking for proper, not prop.
+    3. Issue: line 165 - is this a one-off special setting for a particular year or ongoing 'service' to recode?
+    4. Issue: line 189 - what is the real-world condition detected here?
+    5. Issue: lines 174-231 - what is otherdnp, specifically dnp (NFL says it is "did not play") ?
+      1. Found similar: var *dnp: they are vars in agg sheet: Means, 
+        1.  see rows 17-51 for bp{S}xNNdnp vars...
+      2. -
+    6. Issue: should probably use a different schema per admin, eg OGT2013Fall, OAT2012Summer, etc, or suffix of YYYYMM to indicate a month.
+      1. brought this up at 20130730 python checkin meeting 
+      2. RESOLVED: and paul said not needed... just use our main db, 
+        1. as study data of the db will be picked up and archived as needed by pre and post "glue" type processing.
+    7. Issue: Maybe record a table "parameters" or "context" to record the revision of code used for the study.
+    8. Issue: maybe have a 'run_id" for each run of the glue code, so do not overwrite old output sets when rerun code..?- RESOLVED : No need.
+    9. Issue line 276: what is this check for?
+    10. -
+  2. annotated glue.sas code content: (1) next-level items numbers are glue.sas orig line numbers, and comments are sub-items of  line number level.
+    1. /*proc printto log="H:\share\Ohio Graduation Tests\Technical\2012 March\ScoreReports\Superdata\superdata0508log.txt" new;*/
+    2. /*run;*/
+    3. Options nomprint nosymbolgen;
+    4. %let cvsroot=\\tsclient\C\Projects;
+      1. SETUP some variables, libraries for base paths, 
+    5. %let cvspath=&cvsroot.\CSSC Score Reporting\OGT Spring 2012\Code\Development;
+    6. /**/
+    7. libname input "H:\share\Ohio Graduation Tests\Technical\2012 October\ScoreReports\PostComplimentaryMergeData";
+      1. libname input
+        1. used by: line 572 call: %OGT(inputds=input.ogt); 
+          1. -
+      2. it is the container for the main input dataset 'ogt'.
+    8. libname intake "H:\share\Ohio Graduation Tests\Technical\2012 October\ScoreReports\PostIntakeData";
+      1. ISSUE: found no use of this libname in glue.sas... 
+        1. can it be used by called macros?-check that later
+    9. /*Normal output Data*/
+    10. Libname output "H:\share\Ohio Graduation Tests\Technical\2012 October\ScoreReports\Superdata";
+      1. libname output
+      2. used  in 23 places in glue.sas - main output directory/container
+    11. /*Libname Output "C:\testning\ogts10\output";*/
+    12. /**/
+    13. libname similar "&cvsroot.\CSSC Score Reporting\Ohio Spring 2007\Documents";
+      1. pcdata=similar.similardist is only  used in line 412 as param to PeerCompare()
+      2. end libraries setup
+      3. START includes of code
+    14. /**/
+    15. %include "&cvsroot.\ScoreReportMacros\UnitTested\safeexcelread.sas";
+    16. %include "&cvsroot.\ScoreReportMacros\UnitTested\BookMapReader.sas";
+    17. %include "&cvsroot.\CSSC Score Reporting\OGT Fall 2010\Code\Development\Convert_To_Dotmissing.sas";
+    18. /*%include "&cvsroot.\ScoreReportMacros\UnitTested\peercompare.sas";*/
+    19. %include "&cvsroot.\CSSC Score Reporting\OGT Fall 2010\Code\Development\peercompare.sas";
+    20. %include "&cvsroot.\ScoreReportMacros\UnitTested\ttest.sas";
+    21. %include "&cvsroot.\ScoreReportMacros\UnitTested\cascade.sas";
+    22. %include "&cvsroot.\ScoreReportMacros\UnitTested\means.sas";
+    23. /**/
+    24. %include "&cvsroot.\CSSC Score Reporting\OGT Fall 2010\Code\Development\suppression.sas";
+    25. /**/
+    26. %include "&cvsroot.\ScoreReportMacros\UnitTested\lib_propercase.sas";
+    27. %include "&cvsroot.\ScoreReportMacros\UnitTested\lib_wordcnt.sas";
+    28. /*%include "&cvsroot.\CSSC Score Reporting\OGT Summer 2007\Code\Development\ScaleScoreFreq.sas";*/
+    29. /* rvp added this line locally to normalize line numbers in annotations */
+    30. /**********need change -- start;*********************/
+      1. Did some sas code includes.
+    31. %let bkmap_loc_file=&CVSRoot.\CSSC Score Reporting\OGT Fall 2012\Code\Development\Intake\BookMapLocations1.xls;
+      1. Did set the cvs bkmap_loc_file for ogt fall 2012
+    32. %let DataLayout = &CVSRoot.\CSSC Score Reporting\OGT Fall 2012\Intake Layout\OGT_FA12_Op_DataLayout_IntakeLayout.xls;
+      1. DataLayout - the cvs intakelayout xls file
+    33. /**********need change -- end;*********************/
+    34. %let agg_file=&cvsroot.\CSSC Score Reporting\OGT Fall 2012\Code\Development\Superdata\AggregationSheet.xls;
+      1. agg_file - main workbook with multiple spreadsheets with most glue.sas input parameters
+    35. /*need change*/
+    36. /*%let cnty_name_file=&cvsroot.\CSSC Score Reporting\OGT Spring 2012\Code\Development\CountyNames.xls;*/
+      1. Above COMMENTED out: var for cnty_name_file -- comment below says that intake code now 'does this'. 
+    37. %let subject_list= R M W S C;
+      1. Did set first of  a few CONSTANT PARAMS in glue.sas set once here:
+      2. -Constant parameters: Subject_list, grade, form_list, form=base
+    38. %let admin=Spring;
+      1. -
+    39. %let grade=10;
+    40. %let dummy_grade=10;
+    41. %let form_list=A B;
+    42. %let form=base;
+      1. That set up parameters subject, admin, grade, form_list, form, . . .
+    43. /**/
+    44. %Bookmapreader(excel=Y,
+    45.                     inputds=,
+    46.                     inputfile=&bkmap_loc_file.,
+    47.                     inputsheet=Bookmap);
+      1. Called  Bookmapreader( . . . ) which did . . . 
+      2. Bookmapreader() set a plethora of macro vars to represent the entire set of bookmaps, N of rows in diff cats, even arrays of  values where items were or were not 'released'.
+        1. Some BookmapReader()-created  vars used below  by glue.sas: 
+          1. Item_NotReleased*_A_*, 
+            1. derived by...see BookmapReader line 184.
+          2.  MaxItem*_A_, 
+            1. see BookmapReader line 191
+          3.  MC_Released_*_A_*
+            1. see line 156 of BookmapReader()
+        2. SO - investigate form type 'A" and what it means... in a business sense.
+          1. OK, for the bookmaps that my reference glue.sas code uses, it appears that
+          2. forms are B for Breach and A (for non-breach... or "normal' fall, spring summar administrations.
+        3. in older commented out code: was used:
+          1.  OE_* - some such varnames were used in commented-out code, but not elsewhere here in glue.sas
+          2. The other vars are probably used by other BookmapReader() callers
+    48. /*%safeexcelread(filename=&Diocese_File,sheetname=sheet1,DS_out=Diocese, err_var_name=my_err);*/
+      1. above commented out
+    49. /*%safeexcelread(filename=&agg_file,sheetname=conversion,DS_out=Conversion_table, err_var_name=my_err);*/
+      1. above commented out 
+      2. Next - convert some excel sheets in agg_file into tables for use by "Means"
+      3. -
+    50. %safeexcelread(filename=&agg_file,sheetname=Info,DS_out=info_table, err_var_name=my_err);
+      1. Created DS info_table from agg file sheet Info_DS
+    51. %safeexcelread(filename=&agg_file,sheetname=Means,DS_out=Mean_table, err_var_name=my_err);
+      1. Created DS  Mean_table from agg file sheet Means_DS
+    52. %safeexcelread(filename=&agg_file,sheetname=Percent,DS_out=Percent_table, err_var_name=my_err);
+      1. Created DS Percent_table from agg file sheet Percent_DS
+    53. /*%safeexcelread(filename=&agg_file,sheetname=district_conversion,DS_out=district_conversion, err_var_name=my_err);*/
+      1. commented. out but maybe run earlier?
+    54. /*%safeexcelread(filename=&agg_file,sheetname=school_conversion,DS_out=school_conversion, err_var_name=my_err);*/
+      1. commented
+    55. /*%safeexcelread(filename=&cnty_name_file,sheetname=sheet1,DS_out=County_Names, err_var_name=my_err);*/
+      1. commented
+    56. %safeexcelread(filename=&agg_file,sheetname=ttest,DS_out=ttest_table, err_var_name=my_err);
+      1. created DS ttest_table
+    57. %safeexcelread(filename=&agg_file,sheetname=cascade,DS_out=cascade_table, err_var_name=my_err);
+      1. created DS cascade_table
+    58. %safeexcelread(filename=&agg_file,sheetname=Peercompare,DS_out=peer_table, err_var_name=my_err);
+      1. created DS peer_table
+    59. %safeexcelread(filename=&agg_file,sheetname=suppression_district,DS_out=supp_district, err_var_name=my_err);
+      1. created DS supp_district
+    60. %safeexcelread(filename=&agg_file,sheetname=suppression_state,DS_out=supp_state, err_var_name=my_err);
+      1. created DS supp_state
+    61. %safeexcelread(filename=&agg_file,sheetname=suppression_school,DS_out=supp_school, err_var_name=my_err);
+      1. Created DS supp_school
+      2. So did all of: read agg sheets into datasets : ttest_table, cascade_table, peer_table, supp_district, supp_state, supp_school
+    62. Options NOMprint;
+      1. Next - Declare the macro OGT()
+    63. %macro OGT(inputds=);
+      1. Start Macro OGT - covers through line 563
+    64.     Data _null_;
+      1. Data statement lines 64-67
+    65.         set info_table;
+      1. Set some "ContentStrand_*" variables from the info_table, which is from the info sheet
+    66.         call symput("ContentStrand_"||strip(subject),contentstrand);
+      1. Did set new varname "ContentStrand_X" to info_table's value of  'contentstrand'?
+      2. agg file's info sheet (and so also info_table)  has rows with Subject, contentStrand values:
+        1. R, A R L I X
+          1. Now macro variable "ContentStrand_R" has value "A R L I X"
+        2. M "M G D N A X"
+        3. S, "P L E S X"
+        4. C, "M E S H X"
+        5. W, "P C A X"
+      3. So input dataset info_table row 1 set  var: ContentStrand_R = "A R L I X" , and so on for other rows.
+    67.     run;
+      1. Did run the Data stmt of line 64 which set varnames: "ContentStrand_{subject}.contentstrand from the info_table
+    68.     /*Reading the input and creating a grade variable with a value of 10 to make the conversion easy*/
+    69.     Data OGT_data output.ogt_Galludet;
+      1. Data stmt covers to line 69-85
+      2. This reads the inputds parameter and outputs:
+        1. " OGT_data_output.ogt_Galludet" 
+        2. and below on line 78  also to  output OGT_data
+      3. It does some changes for diocese schools (JVS), composes full student name.. more
+    70.         set &inputds.; 
+      1. inputds is a - Param from macro OGT declaration on line 57
+      2. line 572 calls this with inputds= input.ogt
+      3. and input is defined above on line x  as: 
+        1. libname input "H:\share\Ohio Graduation Tests\Technical\2012 October\ScoreReports\PostComplimentaryMergeData";
+    71. /*if ufxx_SAMPLE=1;*/
+    72.         Student_Name=Cats(ucrxfnm,studentmid,ucrxlnm);
+      1. Did set Student_Name to concatentation of  first, middle, last names from OGT Macro parameter  inputds, 
+      2. assign dob, 
+      3. delete some records with no attempts, 
+      4. to Galludet, push rows only with b and d ids 1-3 with leading zeroes.
+      5. -
+    73.         schtype=schtype_attend;
+    74.         distrtype=distrtype_attend;
+    75. /*Changes for some diocose schools(JVS)*/
+    76. ucrxfnm=compbl(ucrxfnm);
+      1. SAS function compbl() - **Removes multiple blanks from a character string.**
+    77.    ucrxlnm=compbl(ucrxlnm);
+      1. removed multiple blanks from first and last names
+    78.         if not missing(dob_month) and not missing(dob_day) and not missing(dob_year) then 
+    79.         birthdate=put(dob_month,z2.)||"/"||put(dob_day,z2.)||"/"||put(dob_year,$4.);
+      1. Did compose and set birthdate from other vars
+    80. /*Test purpose*/
+    81. /*        if ufxx_SAMPLE=2;*/
+    82.         if ufrx_Attempt=0 and ufmx_Attempt=0 and ufsx_Attempt=0 and ufcx_Attempt=0 and ufwx_Attempt=0 then delete;
+      1. We did  not output rows if no Attempt is set for any subject(r,m,s,c,w)- because the 'delete' command skips such rows
+    83. if  bcrxid_attend in ("000001","000002","000003") or dcrxid_attend in ("000001","000002","000003") then output output.ogt_Galludet;
+      1. shuttle rows for three special school codes to Galludet
+    84.         else output OGT_data;
+      1. other rows, put output here is OGT_data,  from argument inputds on line 57
+    85.     run;
+      1. Ran - Data stmt of line 69-85 to produce output Datasets for OGT_Galludet and OGT_data.
+    86. /*temp:Merge distrtype_home dcrxnm_home schtype_home bcrxnm_home form master_list file*/
+      1. Start commented temp code 
+    87. /*    data master_list;*/
+    88. /*       set intake.master_list;*/
+    89. /*run;*/
+    90. /*proc sort data=OGT_data;*/
+    91. /*by dcrxid_home;*/
+    92. /*run;*/
+    93. /*proc sort data=master_list out=mast_list1(rename=(dcrxid_c=dcrxid_home distrtype=distrtype_home dcrxnm=dcrxnm_home)) nodupkey;*/
+    94. /*by dcrxid_c;*/
+    95. /*run;*/
+    96. /*data merge_master1 ;*/
+    97. /*merge OGT_data(in=a) mast_list1;*/
+    98. /*by dcrxid_home;*/
+    99. /*if a;*/
+    100. /*run;*/
+    101. /*proc sort data=merge_master1;*/
+    102. /*by bcrxid_home;*/
+    103. /*run;*/
+    104. /*proc sort data=master_list out=mast_list2(rename=(bcrxid_c=bcrxid_home schtype=schtype_home bcrxnm=bcrxnm_home)) nodupkey;*/
+    105. /*by bcrxid_c;*/
+    106. /*run;*/
+    107. /*data merge_master2;*/
+    108. /*merge merge_master1(in=a) mast_list2;*/
+    109. /*by bcrxid_home;*/
+    110. /*if a;*/
+    111. /*run;*/
+    112.     /*temp-------------end----------------------------------------------------------------*/
+      1. end commented temp code
+    113.     %safeexcelread(filename=&datalayout,sheetname=sheet1,DS_out=input_layout, err_var_name=my_err);
+      1. Did:  read the &datalayout_sheetname into DS input_layout
+    114.     Proc Sql noprint;
+      1. Get all vars from layout of  type nominal or nominal_id1 into "varlist, used in call to convert_to_dotmissing() on line 119
+    115.         select variable_name into: varlist separated by " "
+    116.         from input_layout where (upcase(type)="NOMINAL" and strip(min) ne "" and strip(max) ne "") or (upcase(type)="NOMINAL_ID1") ;
+    117.     quit;
+      1. Did: Set "varlist" of  input_layout  row values on column "variable_name" with 
+        1. (1) type NOMINAL and min and max are set
+        2.  or (2) type NOMINAL_ID1
+      2.  -- indicating... well the varlist is used next as an arg to convert_to_dotmissing which seems to set missing values.
+      3. -
+    118.     %convert_to_dotmissing(inputlib=work, inputds=OGT_data, outputds=OGT_data_WithDotM, varlist=&varlist.);
+      1. inputds OGT_data is produced in line 69 Data step from inputds.
+      2. macro convert_to_dotmissing was included on line 14
+      3. That call did: converted input OGT_data to OGT_data_WithDotM.
+      4. and the function used var list = &varlist (see line 115 for &varlist) -
+      5. And OGT_data_WithDotM is used as input in next call to produce outData = OGT_Propcase
+    119.     %lib_properCase(inData=OGT_data_WithDotM, varNameList=/*bcrxnm_attend dcrxnm_attend dcrxnm_home*/ dcxx_county ucrxfnm ucrxlnm, outData=OGT_Propcase, maxRomanValue=10, romanOutData=tmp)
+      1. Input is OGT_Data from line, 
+      2. Output is OGT_Propcase
+      3. From line 21 include:  lib_properCase is in .../ScoreReportMacros/UnitTested Macros 
+      4. Create DS OGT_Propcase with names normalized, the O'Hara changed to OHara, similar tweaks.
+      5. OGT_Propcase is used 
+        1. in line 135 to produce out ds "student" 
+        2. but NOT in line 129 Proc Sql to produce output table "Student"-- it is commented out there.
+    120.    /*County problem  is solved in the intake code*/;
+      1. Skip more commented-out code through line 133
+    121.    /* Proc Sort data=county_names(keep=dcrxid oeds_cty) nodupkey;
+    122.         by dcrxid;
+    123.     run;
+    124.     Data county_name;
+    125.         set county_names;
+    126.         dcrxid_C=put(dcrxid,Z6.);
+    127.     run;
+    128.     Proc Sql noprint;
+    129.         Create table Student as
+    130.         select A.*,B.OEDS_CTY as dcxx_county1 
+    131.         from ogt_propcase A left join county_name B on (A.dcrxid_attend=B.dcrxid_C)
+    132.         order by lithocode;
+    133.     quit;*/
+      1. end commented-out intake code does county names, so not done here (anymore).
+      2. -
+    134. proc sort data=ogt_propcase out=student;
+      1. input dataset ogt_propcase genned in lib_properCase()  from line 120
+      2. outut dataset is student
+    135. by lithocode;
+    136. run;
+      1. Did run of proc of line 134
+      2.  From DS ogt_propcase, we did OUTPUT DS  'student', sorted by lithocode.
+    137.     /*Creating a studentlevel dataset after checking the scalescore and levels*/
+    138.     /* Creates 3 other tables which will have records that conflict the rules*/
+      1. Note: 3 output tables will show unruly data.
+    139.     Data output.Student/*(drop= rename=(dcxx_county1=dcxx_county))*/ student_dummy/*(drop= rename=(dcxx_county1=dcxx_county))*/;
+      1. start lines 139-308: This Data step covers through line 308
+      2. Data statement to create DS outputs139- named
+        1.  "output.Student" 
+        2.  and student_dummy 
+        3. with some minor column name additions, value changes,
+          1.  biggest is myid=lithocode
+      3. from input  DS Student (line 141)
+      4. -change missing grade to 99
+      5. -Has a good amount of data massaging to produce a nice output dataset Student.
+    140.             set Student/*_With_DioceseInfo*/ /*(drop= dcxx_county)*/;
+      1. Did set input from dataset student, generated on line 135 from proc sort.
+    141. /*            retain count 0;*/
+    142.         myid=lithocode;
+      1. lines 142-155: create var names like g_xxid from grade, underbar, xxid value
+    143.         bcrxid=bcrxid_attend;
+    144.         dcrxid=dcrxid_attend;
+    145.         bcrxnm=bcrxnm_attend;
+    146.         dcrxnm=dcrxnm_attend;
+    147. schtype=schtype_attend;
+    148. distrtype=distrtype_attend;
+    149.         if grade=. then grade=99;
+    150.         rgrade=grade;
+    151.         scrxid=1;/*Creating a stateid for aggregations*/
+    152.         dummy_record_flag=0;
+    153.         g_dcrxid=strip(grade)||'_'||strip(dcrxid);
+    154.         g_bcrxid=strip(grade)||'_'||strip(bcrxid);
+    155.         g_scrxid=strip(grade)||'_'||strip(scrxid);
+      1. lines 142-155: created var names like g_xxid from grade, underbar, xxid value
+      2. START commented out code . . . through line 163
+    156. /*        if bcrxid_attend="999999" then do;*/
+    157. /*            count=count + 1;*/
+    158. /*            g_bcrxid=strip(grade)||'_'||"999"||strip(put(count,z3.));*/
+    159. /*        end;*/
+    160.         /*Solve spring 2009 apostrophe problem*/
+    161. /*if bcrxid_attend='000652' then bcrxnm_attend=substr(dcrxnm_attend,1,20);*/
+    162.         /*Creating Writing Prompts*/
+    163.         if missing(upwx_OE_Final_1) then Writing_Prompt1=put(upwx_OE_Final_1,$1.);
+      1. SAS function missing() - 
+        1. ex-
+          *  The MISSING function checks a numeric or character expression for a missing value, and returns a numeric result. If the argument does not contain a missing value, SAS returns a value of 0. If the argument contains a missing value, SAS returns a value of 1.
+
+          * A numeric expression is considered missing if it evaluates to a numeric missing value: ., ._, .A, ..., .Z.
+
+          * A character expression is considered missing if it evaluates to a string that contains all blanks or has a length of zero.
+
+        2. -Set Writing_Prompt1 to same 'missing' value as upwx_OE_Final_1
+    164.         else Writing_Prompt1="";
+      1. special value setting/recoding
+    165.         if missing(upwx_OE_Final_4) then Writing_Prompt2=put(upwx_OE_Final_4,$1.);
+      1. if  missing ... so set Writing_Prompt2 to 1-character value in upwx_OE_Final..
+    166.         else Writing_Prompt2="";
+      1. special value setting/recoding to empty string if OE_Final_4 is not missing.. not sure why yet.
+    167.         If ufwx_attempt=0 then do;
+    168.             writing_prompt1="";
+    169.             writing_prompt2="";
+    170.         end;
+      1. did special writing_prompt settings
+    171.         ucxxpon=1;
+    172.         %let subject_list2=R M W SC So;
+      1. NOTE: this subject_list2 is only used to set var subject2, and that var is not used elsewhere in glue.sas,
+    173.         tmp_ucrotherdnp="M W S C";
+    174.         tmp_ucmotherdnp="R W S C";
+    175.         tmp_ucwotherdnp="R M S C";
+    176.         tmp_ucsotherdnp="R M W C";
+    177.         tmp_uccotherdnp="R M W S";
+      1. set special var for each subject containing  each subject-initial for each 'otherdnp' subject.
+      2. what is dnp?
+    178.         length ucrotherdnp ucmotherdnp ucwotherdnp ucsotherdnp uccotherdnp $15.;
+      1. SAS length statement: the end of the the line  has a $ followed by  the number of bytes for storing variables named previously on the line.
+    179.         array tmp_otherdnp(*) tmp_ucrotherdnp tmp_ucmotherdnp tmp_ucwotherdnp tmp_ucsotherdnp tmp_uccotherdnp;
+      1. sas array statement url [http://support.sas.com/documentation/cdl/en/lrdict/64316/HTML/default/viewer.htm#a000201956.htm](http://support.sas.com/documentation/cdl/en/lrdict/64316/HTML/default/viewer.htm#a000201956.htm)
+        1. (*) tells SAS to use the dimension as the count of subsequently named variables on the line.
+      2. Define and populate convenience array tmp_otherdnp()  of otherdnp lists for subjects r,m,w,s,c in order
+    180.         array otherdnp(*)  ucrotherdnp ucmotherdnp ucwotherdnp ucsotherdnp uccotherdnp;
+      1. Just set similar convenience array for five uc*otherdnp variables
+    181.         Reported_Flag=0;
+    182.         /*Scanning through different subjects*/
+    183.         Pass_Count=0;
+    184.         %let i=1;
+    185.         %do %while (%scan(&subject_list,&i) ne);
+      1. start i loop  over subjects,  through 5 subjects in index 'i'
+      2. covers through line 218,
+    186.             %let subject=%scan(&subject_list,&i);
+    187.             %let subject2=%scan(&subject_list2,&i);
+    188.       1. subject_list (line 32) has R M W S C
+      2. subject_list2 (line 173) has R M W Sc So - Some different abbreviations, but in same order
+    189.                 if uf&subject.x_attempt=1 and uf&subject.x_invalid eq 0 then Reported_Flag=1;
+      1. Did set Reported_Flag when input row for &subject has 1 attempt and not invalid.
+      2. It is just a setting to  mirror  in python code version
+    190.                 /*Creating Accomodation flag for each subject*/
+      1. create new column for accomodation flag for this subject dep on sub-accom variables
+    191.                   if  up&subject.x_READ_ALOUD = 1 or
+    192.                         up&subject.x_EXTENDED = 1 or
+    193.                         up&subject.x_DICTIONARY = 1 or
+    194.                         up&subject.x_SCRIBE = 1 or
+    195.                         up&subject.x_CALCULATOR = 1 or
+    196. /*                        up&subject.x_SMALL_GROUP = 1 or*/
+    197.                         up&subject.x_OTHER = 1 then
+    198.                         uf&subject.x_accom = 1;
+    199.                   else
+    200.                         uf&subject.x_accom = 0;
+      1. Created Accomodation flag per subject,
+      2. and next unset other vals per subject..
+    201.             /*Creating IEP and LEP flags*/
+      1. create new 'summary' variables for IEP and LEP 
+    202.             if upxxlep=1 then up&subject.xlep = 1;else up&subject.xlep = 0;
+    203.             if upxxiep=1 then up&subject.xiep = 1;else up&subject.xiep = 0;
+    204.                 up&subject.xpscal=.;
+    205.                 up&subject.xplev=.;
+    206.                 up&subject.xmerged=.;
+    207.                  if up&subject.xlev  in (3 4 5) then Pass_count=Pass_count + 1;
+      1. Adjusted Pass_count, dep on subject.xlev
+    208.                 if up&subject.xlev  in (3 4 5) then up&subject.xpass=1;
+    209.                 else if up&subject.xlev  in (1 2) then up&subject.xpass=2;
+    210.                 else up&subject.xpass=3;
+      1. Adjusted xpass dep on xlev
+    211.                  if up&subject.xlev  in (1 2) or uf&subject.x_attempt=0  or uf&subject.x_invalid=1 then ucxxpon=0;
+      1. Adjusted ucxxpon dep on other vars
+    212.                  if up&subject.xlev  in (3 4 5) or uf&subject.x_attempt=0  or uf&subject.x_invalid=1 then do;
+    213.                     do k=1 to 5;
+      1. start k loop over 'tmp_otherdnp' variables
+    214.                     tmp_otherdnp(k)=tranwrd(tmp_otherdnp(k),"&subject","");
+      1. tranwrd(): replaces or removes all occurences of a word in an expression
+      2. tranwrd(source, target, replacement)
+      3. here from tmp_otherdnp(k) we find target subject and replace it with empty string ""
+      4. ISSUE: so why is that done...?
+        1. So now the current subject at  i  is NOT in its ANY tmp_otherdnp list of other subjects. 
+    215.                     end;
+      1. end k loop at 213 over subjects for setting tmp*dnp(k) vars.
+    216.                 end;
+      1. end clause  at at 212 for xlev in 3,4,5
+    217.                 %let i=%eval(&i+1);
+    218.         %end;
+      1. end i loop over subjects (i) at line 185 .
+    219.         do k=1 to 5;
+      1. start k do-loop over subjects abbreviations through line 232
+    220.             if length(compress(tmp_otherdnp(k)))=0 then otherdnp(k)="";
+      1. Set otherdnp(k) to empty if tmp_otherdnp(k) is has only blanks.
+      2. -
+      3. SAS function compress() removes from src string in arg1 all blank chars, or if 2d argument is given, it removes those chars.
+      4. Here if  return value of  length( compress . . .) is 0, src string had no non-blank chars.
+      5. Theory: DNP may stand for "Did not (yet) Process" ?
+    221.             else if length(compress(tmp_otherdnp(k)))=1 then otherdnp(k)=tmp_otherdnp(k);
+      1. so if only a single nonblank (subject abbreviation letter) in tmp_otherdnp, set otherdnp(k) to it.
+    222.             else if length(compress(tmp_otherdnp(k)))=2 then otherdnp(k)=substr(compress(tmp_otherdnp(k)),1,1)||", "||substr(compress(tmp_otherdnp(k)),2,1);
+      1. SAS substr returns string at pos of arg2 (in SAS, first pos is '1') of length of arg3
+      2. So here, exactly 2 'other' subjects remain in tmp_otherdnp.... in which case it:
+        1. This just copies the two subject-abbreviation  chars in tmp_otherdnp(k) to otherdnp(k) 
+    223.             else if length(compress(tmp_otherdnp(k)))=3 
+    224.             then otherdnp(k)=substr(compress(tmp_otherdnp(k)),1,1)||", "||substr(compress(tmp_otherdnp(k)),2,1)||", "||substr(compress(tmp_otherdnp(k)),3,1);
+      1. as prior case, but copy 3 subject-abbreviation chars here
+    225.             else if length(compress(tmp_otherdnp(k)))=4 
+    226.             then otherdnp(k)=substr(compress(tmp_otherdnp(k)),1,1)||", "||substr(compress(tmp_otherdnp(k)),2,1)||", "||
+    227.             substr(compress(tmp_otherdnp(k)),3,1)||", "||substr(compress(tmp_otherdnp(k)),4,1);
+      1. as prior case, but copy the  4 'other' subject letter chars here
+    228.             otherdnp(k)=tranwrd(otherdnp(k),"C","XX");
+      1. -SAS function tranwrd(str_source, str_find, str_replace)
+      2. so, in otherdnp(), replace any C with an XX (temporary change to not mess up next change, apparently)
+    229.             otherdnp(k)=tranwrd(otherdnp(k),"S","Sc");
+      1. otherdnp(k) - set it to the and 'S' to the 'Sc' style of abbreviation
+    230.             otherdnp(k)=tranwrd(otherdnp(k),"XX","So");
+      1. set otherdnp for orig 'S' in line 229 to the 'So' style for social studies
+    231.             otherdnp(k)=compress(otherdnp(k));
+      1. final compress to remove any stray blank chars in otherdnp.
+      2. now otherdnp has the 'style2' abbreviations vs the tmp_otherdnp() array.
+    232.         end;
+      1. end k loop over subjects, of line 219-232
+      2. That loop did: scanned the otherdnp values and compressed them... and ...put the style2 abbeviations there.
+        1. ISSUE: Where is this used?
+      3. review: SAS compress() function simply removes chars:s=compress("hello","l)" returns s="heo".
+      4. -
+    233.     /*Scanning through different subjects*/
+    234.         %let i=1;
+    235.         %do %while (%scan(&subject_list,&i) ne);
+      1. Start i loop  235-298, over 5 subjects : &sub_char, 
+      2. where  subject_list was set at line 32 
+    236.             %let sub_char=%scan(&subject_list,&i);
+      1. Did set sub_char to a subject in subject_list[i]  of  (R M W S C)
+    237.     /*Scanning through the contentstrand for each subject*/
+    238.             %let level_vars=;
+    239.             %let Ldum1 =;
+    240.             %let Ldum2 =;
+    241.             %let Ldum3 =; 
+    242.             %let Ldum4 =; 
+    243.             %let j=1;
+    244.             %do %while (%scan(&&contentstrand_&sub_char.,&j) ne);
+      1. j loop over contentstrand_{S}[j]: ie  (non-null) content strand for subject "i" of  &sub_char, jth item contentstrand abbreviation
+      2. covers 244-256.
+      3. This uses index j, while the while(xx,ne) satisfies "ne", is not zero, 
+      4. That is, while the "j" index exists in the contentstrand_{S} string... OK.
+    245.                     %let cs=%scan(&&contentstrand_&sub_char.,&j);
+      1. j index exists, so set cs to the jth contentstrand value for the subject, as set above in line 60.
+    246.                 %If &CS. ne X %then %do;
+      1. Process a normal content strand value (not the X or 'all' special strand value)
+    247. /*          Options Symbolgen;*/
+    248.                 %let Level_Vars=&Level_Vars up&sub_char.&cs.lev;
+      1. Did append varname to Level_vars
+        1. Appended  to it a variable name of the form: up{S}{CS}lev
+        2. Eg, for subject R, strand A it appended var name "upralev"
+    249.                 %let Ldum1 = &Ldum1.    up&sub_char.&cs.dum1;
+      1. append var names to Ldum1 like up{S}{C}dum1
+    250.                 %let Ldum2 = &Ldum2.    up&sub_char.&cs.dum2;
+    251.                 %let Ldum3 = &Ldum3.    up&sub_char.&cs.dum3;
+    252.                 %let Ldum4 = &Ldum4.    up&sub_char.&cs.dum4;
+      1. Did append to Ldum[1-4] vars another value like:  up{S}{CS}dumN
+    253.                 %end;
+      1. end j-loop of line 244-253 for 'real' content strands
+      2. Var strings LdumN  were  appended with names like (upRAdumN, upRLdumN, etc)
+    254.                 %let j=%eval(&j+1);
+      1. incremented  j content strand index
+    255. /*          Options NoSymbolgen;*/
+    256.             %end; 
+      1. end j loop of line 244-256 over content strands (unless CS is special 'X" for all)
+      2. created Level_vars at line 248 -list of varnames like: up{S}{C}lev
+      3. created:% Ldum1[*] =  list of names of the form: up{S}{CS}.dum1 ... for this S and every CS in it.
+      4. also created similar %vars named  Ldum2-4: with same makeup.. 
+    257.             array level&sub_char.[*] &Level_Vars;
+      1. Created convenience/alias array  level{S}[*] for Level_Vars items/names declared/accumulated at line 248.
+      2. holding vars named like up{S}{CS}lev - for just this {S}
+    258.             array ldum1&sub_char.[*] &Ldum1;
+      1. create array ldum1{S}[*] for Ldum1 vars accumulated at line 249 (* is over contentstrands), but all for this subject ( subject loop  is lines 235-298)
+    259.             array ldum2&sub_char.[*] &Ldum2;
+    260.             array ldum3&sub_char.[*] &Ldum3;
+    261.             array ldum4&sub_char.[*] &Ldum4;
+      1. created arrays named  LdumN{S} to hold the ldum1 vars that hold up{S}{CS}dumN variable names, contrained to the current {S} loop value, over all CS values.
+      2. so now an index/list for each subject can traverse  all of  a subject's  content strands
+    262.             do i = 1 to %eval(&j-2); 
+      1. i loop lines 262-277, over real content strands (do not use strand  'x' )
+      2. NB: 'i' is also used in outer loop of lines 235-298, but maybe SAS creates a separate scope for the index in 'do' loops so as to not interfere with the outer 'i'....?
+      3. J was incremented 1 past the N of  content strands at line 254, plus the last one is always 'X', so it is not a real content strand.
+      4. So, that is why i ranges from 1 to j-2, not to j, to range over all content strand indices.
+    263.                 ldum1&sub_char.[i] =0;
+    264.                 ldum2&sub_char.[i]= 0;
+    265.                 ldum3&sub_char.[i]= 0;
+    266.                 ldum4&sub_char.[i]= 0; 
+      1. In prior contentstrand loop, we created the variable name arrays for ldum1{S}
+      2. and now we just did set for all of this subjects ldum1 vars for this content strand 'i' ldum1-4{S}[i] = 0 
+      3. This was a handy way to set the constituent variables  assigned to  0 by using the array index 'alias' rather than enumerating each assignment statement.
+    267.                 if level&sub_char.[i] = . then do;
+      1. However, If the level{s}[i] (array was set at line 257)
+      2.  for this [i] content strand is missing (.) , which it is in here, 
+      3. next  we set the four dum [i] values to missing
+    268.                     ldum1&sub_char.[i]= .; 
+    269.                     ldum2&sub_char.[i]= .;
+    270.                     ldum3&sub_char.[i]= .;
+    271.                     ldum4&sub_char.[i]= .;
+    272.                 end;
+      1. end clause for missing  level&sub_char [i] of line 267
+    273.                 else if level&sub_char.[i] = 1 then ldum1&sub_char.[i] = 100;
+      1. here the level{S} for contentstrand[i] is not missing, but it is exactly 1, 
+      2. So set ldum1* to 100
+    274.                 else if level&sub_char.[i] = 2 then ldum2&sub_char.[i] = 100;
+    275.                 else if level&sub_char.[i] = 3 then ldum3&sub_char.[i] = 100;
+      1. In lines 273-275:  one and only one of the ldum{S} 1-3 are set dep on the level{S}[i] value
+    276.                 if level&sub_char.[i] in (2 3) then ldum4&sub_char.[i] = 100;
+      1. Separate setting for ldum4{S}[i] - if  level{S} was either 2 or 3, set ldum4{S}[[i] to 100...
+      2. just  because....that's how it is done.
+    277.             end;
+      1. end i  loop at 262-277 over content strands to set LdumN{S}[i] values dep on level{S} [i] values
+      2. Did - initialzed our four 'dum' arrays for this subject over its content strands, and...
+    278.             array ldum&sub_char.[5] up&sub_char.xdum1 up&sub_char.xdum2 up&sub_char.xdum3 up&sub_char.xdum4 up&sub_char.xdum5;  
+      1. set a convenience/alias array of ldum{S}[5]  from var names  up{S}xdum[1-5] with five suffixes xdum1-5
+    279.             do k= 1 to 5;
+      1. k loop 279-283, start k loop over ldum{S}[1-5]  index values  to address var arrays for  ldumN{S}, ldum{S},  per line 278
+      2. -
+    280.                 ldum&sub_char.[k]=0;
+      1. via array alias of line 278,  init to 0 the vars named in line 278
+    281.                 if up&sub_char.xlev = . then ldum&sub_char.[k]=.;
+      1. did set ldum{S}[i] t0 missing if var up{S}xlev has value missing
+    282.                 else if up&sub_char.xlev=k then ldum&sub_char.[k]=100;
+      1. else if value was k, did set  ldum{S}[k] gets value 100
+    283.             end;
+      1. end 279-283  k loop  through indices[1-5]  for vars  ldum{s}[1-5] vars
+      2. NEXT section: lines 284 - 296 : 
+      3. We are back out to main sub_char  loop (234-298)
+      4. Set some new vars profOrHigher{S}, advacc{S}, others.
+    284.             if up&sub_char.xlev in (3 4 5) then profOrHigher&sub_char. = 100;
+    285.                 else if up&sub_char.xlev in (1 2) then profOrHigher&sub_char. = 0;
+    286.             if up&sub_char.xlev in (. .A) then profOrHigher&sub_char. = .;
+    287.             if up&sub_char.xlev in (4 5) then advacc&sub_char.=100;
+    288.                 else if up&sub_char.xlev in (1 2 3) then advacc&sub_char.=0;
+    289.             if up&sub_char.xlev in (. .A) then advacc&sub_char.=.;
+    290.             if up&sub_char.xlev in (1 2 ) then BelowProf&sub_char.=100;
+    291.                 else if up&sub_char.xlev in (3 4 5) then Belowprof&sub_char.=0;
+    292.             if up&sub_char.xlev in (. .A) then BelowProf&sub_char.=.;
+    293.                 InclusionFlag&sub_char.=1;
+    294.                 if uf&sub_char.x_attempt ne 1  or uf&sub_char.x_invalid=1 or  Schtype="H" then do;
+    295.                 inclusionflag&sub_char.=0;
+    296.             end;
+      1. end if at line 292-296
+    297.                 %let i=%eval(&i+1);
+    298.         %end;
+      1. end i loop at line 235-298 over subjects 
+      2. SCOPE HERE now: at outer scope of this Data step
+    299.         if schtype not in ("N" "H" "D") and dummy_record_flag=0 then stateinclusionflag=1;
+    300.         if schtype not in ("N" "H" "C" "U" ) then districtinclusionflag=1;
+      1. Did set state and district inclusionflags dep on schtype
+    301.         Attempt_All=0;
+    302.         if ufrx_attempt=1 and ufmx_attempt=1 and ufwx_attempt=1 and ufsx_attempt=1 and ufcx_attempt=1 then Attempt_all=1;
+      1. Did set Attempt_all
+    303.             output output.student; 
+      1. Did  write row to  output goes to output.student
+      2. This seems a complete copy of output dataset student
+    304.         If dcrxid_home ne "" then do;
+      1. Make aux output to student dummy  only for student rows with a given dcrxid_home value.
+    305.             dummy_record_flag=1;
+    306.             output Student_dummy;
+      1. input student_dummy was declared on line 140, 
+      2. The  output dataset Student_dummy datset is almost a copy of  dataset student except: 
+        1. student_dummy includes only rows where dcrxid_home is not "".
+        2. amd in student_dummy  we set dummy_record_flag to 1, but it is 0 in dataset student.
+      3. student_dummy  is used on line 310 in next Data step  student_dummy
+    307.         end;
+      1. end if clause of line 304-307
+    308.     run;
+      1. end lines 139-308: Did run   "Data output.Student" 
+    309.     Data student_dummy;
+      1. Start lines 309-320:  Data  output ds = student_dummy, from input student dummy at line 306
+      2. output is based on student_dummy from line 306, rows where dcrxid != ""... 
+      3. Here we add or overwrite a few new columns 
+    310.         set student_dummy;
+      1. input is student_dummy, from line 306, and here we  modify some columns on output..
+      2. note that columns dummy_flag (not revised here, always 1 set on line 305) , g_dcrxid, g_bcrxid, g_scrxid are used in agg sheet "means".
+    311.         dcrxid=dcrxid_home;
+    312.          dcrxnm=dcrxnm_home;
+    313.         distrtype=distrtype_home;
+    314.         g_dcrxid=strip(grade)||'_'||strip(dcrxid);
+    315.         dcrxnm_attend=dcrxnm_home;
+    316.         bcrxid_attend="";
+    317.         schtype="";
+    318.         g_bcrxid="";
+    319.         g_scrxid=strip(grade)||'_'||strip(scrxid);
+    320.     run;
+      1. end lines 309-320: Did run Data student_dummy at line 309
+      2. and added a handful of  vars inited or composed of other vars
+      3. because...
+    321.     Data student_aggregation;
+      1. lines 321-352
+      2. output dataset is student_aggregation
+        1. line 354 call : ttest(inputds=student_aggregation... ) 
+          1. which uses both the state and districtinclusionflag, but no item_id/position score items.
+          2. dummy_record_flag usage: 
+            1. not used as wherevar for the 10 or so district level rows
+            2. IS used as wherevar for the 10 or so school rows, with value 0  
+        2. line 356 cascade uses  inputds=student_aggregation
+        3. line 390:dataset student_aggregation is  used by Means():
+          1.  it does use item-numbered columns with item-numbered item info.
+        4. line 395 - Data step uses student_aggregation
+          1.  and  produces partitions for grade 10-15, 99, eg named student_aggregation_g10, etc.. 
+        5. line 410: call to PeerCompare(inputds=student_aggregation...) - 
+          1. but it uses no item data in its agg  sheet peercompare
+        6. line 447 (last use): is a mere sort and dup removal to get some unique dcrxids, other ids into dataset 'district':
+          1. Proc sort data=student_aggregation(where=(strip(dcrxid) ne "") keep= g_dcrxid g_scrxid dcrxid scrxid dcrxnm grade rgrade distrtype) out=district nodupkey;
+          2.             by g_dcrxid;
+      3. lines 321-352 do  basically: 
+        1. Find the input vars in 2 inputs (output.student and student_dummy) 
+          1.  that are deemed "released"  in global macro var array MC_Released 
+          2.  and multiply the value of each by 100.
+        2. Create vars stateinclusionflag and districtinclusion flag and set them to 0 or 1 based on the input value of schtype (lines 325-326).
+    322.         set output.student student_dummy;
+      1. INPUT datasets are: (1) output.student and (2) student_dummy, and remember that SAS will read the first one first, then the second one.
+      2. So the output "student_aggregation" does 'aggregate' the two input datsets in a sense (but really appended) , to create the output dataset "student_aggregation"
+      3. Here  DATASET INPUTS  are:, 
+        1. INPUT1 =  output.student  - see lines 140, 303
+          1. -Line 303 - basic Student data 
+        2. and INPUT2 = student_dummy - see lines 140 and  306
+          1. -Line 306 - no rows with empty dcrxids, but  same columns (basically) as student_aggregation.
+        3. NOTE: per SAS docs, the first dataset is read first, followed by the second.
+    323.         stateinclusionflag=0;
+    324.         districtinclusionflag=0;
+    325.         if schtype not in ("N" "H" "D") and dummy_record_flag=0 then stateinclusionflag=1;
+      1. did set stateinclusionflag=1, except for schooltypes H=Home, N=? and D=?
+    326.         if schtype not in ("N" "H" "C" "U" ) then districtinclusionflag=1;
+      1. Did set the state, district inclusion flags per schtype value.
+    327. /* JVS student with non-public home districts should not be aggregated to the state level(public). */
+      1. Did state the "JVS  rule" governing aggregation segregation.
+    328. if distrtype = "J" and distrtype_home in ("N","D") then stateinclusionflag=0;
+    329.          /*Scanning through different subjects*/
+    330.         %let i=1;
+    331.         %do %while (%scan(&subject_list,&i) ne);
+      1. lines 331-342: i loop over subjects
+    332.             %let sub_char=%scan(&subject_list,&i);
+    333.             %if  &admin=spring %then %do;    
+      1. if clause lines 333-340
+    334.                 %if (&&MC_Released_&sub_char._A_&grade. ne )  %then %do;
+      1. if clause lines 334-339
+      2. MC_Released{S}_A_{G}... is set from BookMapReader() call
+        1. theory: this means that for this subject all MC items are officially 'released'?
+      3. here, admin is spring and MC_Released for subject and grade... 
+        1. and A is form A, and remember this var was set from BookmapReader from bookmap data...
+      4. find prior reference to MC_Released* -- OK, it is set by above call to BookmapReader() on line 44.
+    335.                 array item&sub_char.(*)  &&MC_Released_&sub_char._A_&grade.;
+      1. make array item{S}(*) for the MC_Released{S}.... array this this loop's subject. and the overarching &grade.
+    336.                 do j=1 to dim(item&sub_char.);
+      1. -start j loop 336-338 over dim() (number of) items for this subject 
+      2. ie, number of varnames like "upW_score_item3, upW_score_item5', . . . 
+        1.  that exist in MC_Released... array populated by bookmapreader.
+    337.                     item&sub_char.(j)=item&sub_char.(j)*100;
+      1. Multiply  item_{S}(j) value by factor of 100 because . . . just required
+      2. so this is like upW_score_item_3 *= 100 - probably  to make some downstream calculations easier.
+      3. NB: 
+        1. this assumes that the input dataset HAS the named variable in it, eg upW_score_item_3
+      4. NOTE: This does not create such var names, it assumes they are available in the
+      5. input.. and so this is where (or prior to this loop actually) emulation python code needs to:
+        1. read the sql server 2012 database tables named  MC* per subject for items data,
+        2. and output and cacluate new updated MC* tables with these new variable  values.
+        3. Design ALT A:
+          1. Aside; consider in python code: just outputting an update table that identifies the subject, item pos, new value - then an sql statement can use it to update input MC* tables or copies of them..
+        4. -Design Alt B: 
+          1. modify design of  python glue function Study. study_ogt() to accept the sas-style full-blown 2K+ column query results dataset with up to 4096 columns that includes the MC  items data for ALL 5 subjects and aliases the sql-server style column names into the old-style sas names....as used in the workbook agg, sheet 'means'.
+          2. this will require some new code to construct the humongous sql query to join all the tables and create the alias column names, but just need a python script utility to generate that query. Then use that to define/initialize the main student input dataset. 
+            1. Aside: might also develop some support for a 'merge' capability for pre-sorted multiple cvs files that works the same way, off of the 1 'flat' and 5 MC_subject style of cvs-stored datasets pre-sorted. - future possibility.
+          3. This will allow direct manipulation of the 'row' dictionary values to modify the variable values, eg to multiply by 100 and to peform a row-level accrue() functionality for the means() (and other stats).
+          4.  A huge speedup.  
+        5. Design Alt C: 
+          1. utility to do an auto-update of the means sheet to relabel the variable names and add a table_name column to create a modified " means_sheet", in keeping with the approach glue.sas does already, to modify its original means_sheet based on MC_released status that may change in the bookmap info files.
+    338.                 end;
+      1. end j loop  of line 336-338
+      2.  j loop over  items for subject of  i loop and given form, grade
+    339.                 %end;
+      1. end if-do clause of line 334-339 - MC items released for this subject not blank
+    340.              %end;
+      1. end if-do clause of line 333 - 340 spring admin
+    341.         %let i=%eval(&i+1);
+    342.         %end;
+      1. end i loop  over subjects of  line 331-342.  RECAP:
+        1. Did: create array item{S}(*) of  &MC_Released_{S}_A_{G} - 
+          1. where bookmapReader set MC_Released_{S}_A_{G} there --at line. 155 and comments.
+          2. It is an array of 'conststruct' values, ie var names of the form:
+            1. upRx_score_item_12, for the 'where' conditions of bookmapreader.sas line 158:
+              1.  where upcase(&BM_itemformat_var)="MC" 
+              2. and upcase(&BM_Role_var.)="OPERATIONAL" 
+              3. and Upcase(&BM_TaggedForRelease_var.)="YES";
+        2. Did: simply multiply the values of those variables times 100, and those are assumed to be actual output variable names in the input and output datasets.
+      2. Start - set/recode ethnicity codes for integer level values,  and also set migrant and gender....
+    343.          if  strip(ethnicity)="1" then ethnicity_code='ai';
+    344.            else if    strip(ethnicity)="2" then ethnicity_code='as';
+    345.            else if    strip(ethnicity)="3" then ethnicity_code='af';
+    346.            else if    strip(ethnicity)="4" then ethnicity_code='hs';
+    347.            else if    strip(ethnicity)="5" then ethnicity_code='wh';
+    348.            else if    strip(ethnicity)="6" then ethnicity_code='mu';
+    349.            ufxx_migrant=migrant;
+    350.            gender=ucrxgen;
+      1. Did: set/recode ethnicity codes for integer level values,  and also set migrant and gender
+    351.         if schtype ne "H";
+      1. That skipped all rows where schtype is 'H'. - Home schooled.
+    352.     run;
+      1. end lines 321-352, "Data student_aggregation"  step
+      2. NB: This is the key input data required for next call to macro ttest() and probably some following macros.
+      3. NB: Python code should also be added to support 'new' sql server data relations, where per-subject tables now exist to hold book_item_position data per item.
+        1. consider:ALT A -  converting "old-style" of data, revealed by column or var names ending in item number, in agg sheet tttest (and others) to 'new-style':
+          1. change old-style ttest sheet column of  variable name into 2 columns, 1 for table name or subject and 1 for new variable name
+        2. Alt B: - 
+          1. simply have ttest() use a dataset or sql view that uses the same column names that appear in the ttest sheet, but the view or dataset is structured to join the 'flat and the subject-item' tables properly and provide output column name aliases to match the agg.ttest sheet, so no changes needed in ttest code, others...
+          2. per this link, MAY have up to 4096 columns in a select, so this approach of constructing a select to join the flat table and 5 MC subject* tables should work, using the 'traditional-sas-style' column names.
+          3. just check whether ttest needs more than 1024 columns... ie in the spreadsheet...
+            1. or  if so - check whether sql server has a 1024 column limit on views... maybe it only applies to tables, and if so, this is fine. -- OK, it has 4096 column limit on selected columns. That will suffice.
+    353.     %put "-------------------------------------ttest start;";
+    354.     %ttest(excel=N,agg_ds=ttest_table,agg_file=,agg_sheet=,inputds=student_aggregation);
+      1. Did run macro ttest - 
+      2. DO SEE:  Doc ttest_doc.doc in C:\CVSProjects\ScoreReportMacros\UnitTested\ttest
+        1. In that doc p4 of 7 describes the params
+          1. excel is Y if input is of type Excel or N of it is of type DS
+          2. agg_ds is the input "spec sheet"  DS if excel is N
+          3. -agg_file is the input spec in an  excel file if excel is Y, and agg_sheet is the sheet name
+          4. input ds - the name of the actual input for the ttest call.
+        2. p4 describes the columns for the input spec dataset (only 31 rows [ (School,Distrct) * subject (q5) * inputVar(ProfOrHigher{S}, advacc{S}) * ParentLevel(state alone for District,, (state or district for school)] so
+          1. TargetLevel of Disctrict{S} has 1 * 5 * 2 rows = 10,
+          2. TargetLevel School has 1 * 5 * 2 * 2 = 20
+          3. total rows = 30 + 1 for header
+        3.           1. outputvar is the name of the output var (computed ttest stat value?)
+          2. input var - eg ScaleScore , on which to base the ttest
+          3. more: --Targetlevel- Name of the target level (ex- District_R_,School_W, State_M, [Rclass]).No special characters are allowed in this column, as this is used to create the name of the output dataset.
+
+TargetID- Lists the Target ID variable (Rclass_id).
+
+WhereT- List of variables separated by ?*?. This will be used to subset the
+target level data before any calculations.
+
+WhereT_Value- List of values separated by blank corresponding to the list of
+variables specified in the whereT column.
+
+Parentlevel- Name of the parent level (examples:Disctrict, State,, School).
+
+ParentID- Lists the Parent ID variable (bcrxid).
+
+WhereP- List of variable separated by ?*?. This will be used to subset the
+parent level data before any calculations.
+
+WhereP_Value- List of values separated by blank corresponding to the list of
+variables specified in the whereP column.
+
+          4. --if annotate more on ttest, do it here
+        4. See all 7 pages in that doc.. very useful succinct documentation
+      3. -
+    355. %put "-------------------------------------ttest end;";
+    356.     %cascade(excel=N,agg_ds=cascade_table,agg_file=,agg_sheet=,inputds=student_aggregation);
+      1. Did run macro cascade--
+      2. -do the processing directed in the agg workbook sheet 'cascade' rows, with columns and row1 values
+        1. output var: dpraccf
+        2. Subject: R
+        3. Level district
+        4. LevelVar _dcrxid
+        5. InputVar upraraw
+        6. criterion: None
+        7. Wherevar: InclusionFlagR (or "varA * VarB ...)
+        8. Wherevalue; 1 (or: 1 2 . . . )
+    357.     %put "-------------------------------------cascade end;";
+    358.      Data Mean_OGT (drop=pattern position);
+      1. Start Data Mean_OGT step lines 358-388
+      2.  to produce output DS Mean_OGT from input Mean_table
+      3. this basically looks at bookmaps and selects the good released MC items
+    359.         set Mean_table;
+      1. input DS Mean_table  created at line 45 from agg_file sheet "Means"
+    360.         pattern = prxparse('/_score_item_/');
+      1. SAS prxparse(): compiles perl regular expression (PRX) into pattern that can be used for pattern matching - 
+    361.         call prxsubstr(pattern, inputvar, position);
+      1. NOTE: "inputvar" is a column of the input Mean_table, sample values: 
+        1. uprxscal
+        2. uprx_score_item_50, etc... 
+      2. -sas doc on prxsubstr():  url [http://support.sas.com/documentation/cdl/en/lrdict/64316/HTML/default/viewer.htm#a002295971.htm](http://support.sas.com/documentation/cdl/en/lrdict/64316/HTML/default/viewer.htm#a002295971.htm)
+      3. position > 0 means pattern was found in name of inputvar, 
+    362.         if position > 0 then do;
+      1. lines 362-387
+      2. Start if-do: Match of  '_score_item_" was found in inputvar
+    363.              %let i=1;
+    364.             %do %while(%scan(&subject_list,&i.) ne);  
+      1. Start  i loop through subjects
+    365.                 %let sub_char=%scan(&subject_list,&i.);
+    366.                 %let  j=1;
+    367.                 %do %while(%scan(&&Item_NotReleased_&sub_char._A_&grade , &j.) ne) ;
+      1. start j loop through items in list of  "Item_NotReleased_{S}_A_{G}[j] list.
+      2. Do ONLY where Item_NotReleased{S}{G} is NULl.
+      3. See line 37 call to BookmapReader set the ItemNotReleased*_A_* value.
+    368.                     %let var=%upcase(%scan(&&Item_NotReleased_&sub_char._A_&grade, &j.));
+      1. var is the upcase value  (ie a up{S}x_score_item_{N}" style variable name) for jth item stored in  this array "ItemNotReleased--  for this subject and grade" .
+      2. Rem: line 37 call to BookmapReader  is what set the ItemNotReleased*_A_* array with var names
+    369.                     if upcase(inputvar)="&var." then delete;
+      1. delete (stop)  processing this row (so do not output a row for it)  if inputvar is in ItemNotReleased* [j].. because ...it seems this Item is "Not Released", so we must not produce output for it.
+    370.                     %let j=%eval(&j + 1);
+    371.                 %end;
+      1. end j loop of line 366-371 over Item Not released variable names ( item vars)  list
+      2. if here, some item or items for this subject grade , per the Item_NotReleases{S}{G} assertion  were rleased
+    372. /*                %let  j=1;*/
+    373. /*                %do %while(%scan(&&OE_Released_&sub_char._A_&grade. , &j.) ne) ;*/
+    374. /*                    %let var=%upcase(%scan(&&Item_NotReleased_&sub_char._A_&grade, &j.));*/
+    375. /*                    if upcase(inputvar)="&var." then rdvalue=1;*/
+    376. /*                    %let j=%eval(&j + 1);*/
+    377. /*                %end;*/
+    378. /*                %let  j=1;*/
+    379. /*                %do %while(%scan(&&OE_Released_&sub_char._A_&grade., &j.) ne) ;*/
+    380. /*                    %let var=%upcase(%scan(&&Item_NotReleased_&sub_char._A_&grade, &j.));*/
+    381. /*                    if upcase(inputvar)="&var." then rdvalue=;*/
+    382. /*                    %let j=%eval(&j + 1);*/
+    383. /*                %end;*/
+    384.             if upcase(substr(inputvar,3,1))="&sub_char." and substr(strip(inputvar),17)>  &&MaxitemNum_&sub_char._A_&grade. then delete;
+      1. If got here, inputvar char pos 3 matches current subject and item number not too big
+      2. NOTE: MaxitemNum.*_A_* is set by above call to BookmapReader().
+      3. Here we delete or ignore this input row and do not output a row for it when
+        1. because the inputvar third position (eg upSx_score_item7) char pos 3 is for current &sub_char subject, say='S' here, 
+        2. AND  beginning at pos 17 must be the item number value 
+        3. and its value exceeds max items for this subject,
+        4.  so guesing it is now deemed bogus and 
+        5. so we delete the row or further processing for it.
+    385.                 %let i=%eval(&i + 1);
+    386.             %end;
+      1. end i loop  thru subjects of  line 364
+    387.         end;
+      1. end if-do inputvar has "_score_item_" of line 362-387
+      2. end of  examining all score_item var iable names in 'inputvar' in the MEANS SHEET and keeping only those that are 'released' in output DS "OGT_Mean"
+    388.     run;
+      1. lines 358-388: Did  Data step to produce DS  Mean_OGT,  a subset of rows from  input Mean_table,
+        1. Mean_OGT now  has ONLY the inputvar names in its 'sheet'-like dataset that are released.
+        2.  filtering out rows for items not released, or for other rows for which to NOT create MEANS analyses now (item number too high).
+      2. We DID: recap: 
+        1. line 369 we deleted a row where the inputvar matched any 'itemnotreleased' variable name... 
+        2. lin 384 we deleted rows with too-high item numbers... 
+      3. So - basically: this simply modified the aggregation workbook sheet for 'means_table' with the set of 'standing analyses' to try to do, and it excluded some rows/analyses to do because Means() uses this output to control its set of analyses.
+      4. --
+    389.     %put "-------------------------------------means start;";
+    390.     %Means(excel=N,agg_ds=Mean_OGT,agg_file=,agg_sheet=, inputds=student_aggregation,percent=Y, percent_file=, percent_sheet=, percent_ds=percent_table, debug=0);
+      1. -See Means.doc under C:\CVSProjects\ScoreReportMacros\UnitTested\Means
+        1. another fine doc it is 
+        2. agg_ds=Mean_OGT  is input dataset, a spec to calc stats, derived from mean_table in agg workbook  means sheet at line 51, just revised a bit by Data Mean_OGT of  lines 362-288 above
+        3. inputds is student_aggregation-
+        4. percent=Y, so do calculate 'the percentage variable'
+        5. percent_ds=percent_table also a sheet read at line 52, part of  initial agg workbook  at line 34
+      2. also see python means code:
+    391.     %put "-------------------------------------means end;";
+    392.       %let districtds=mean_g_dcrxid;
+      1. For origin of variable 'mean_g_dcrxid", see C:\CVSProjects\ScoreReportMacros\UnitTested\Means.sas -- 
+        1. It is produced by the %means macro (as are mean_g_bcrxid, mean_g_scrxid), 
+          1. because %Means produces a dataset named mean_xxx for xxx for every levelvar mentioned in the means sheet.
+        2. Its top comments say that it outputs variables named  mean_$LevelVar'  for every value in the agg sheet "Means" (now in the dataset "Means_table", see line 51?).
+        3. that Means_table has LevelVar =" g_dcrxid", and so the just-prior Means call genned var name "mean_g_dcrxid", plus many more
+    393.     %let schoolds=mean_g_bcrxid;
+      1. mean_*  are dataset/output file names that are genned by the  Means() call on line 390.
+    394.     %let schoolds2=;
+    395.     Data student_aggregation_g10 student_aggregation_g11 student_aggregation_g12 student_aggregation_g13 student_aggregation_g14 student_aggregation_g15 student_aggregation_g99;
+      1. Start Data step for doling out by-grade slices of  INPUTDS="student_aggregation" to multiple OUTPUT DSes =  student_aggregation_g[10,11,12,13,14,15,99]
+      2. covers lines 395-404. run is at line 404
+    396.         set student_aggregation;
+      1. Based on input DS student_aggregation
+    397.         if grade=10 then output student_aggregation_g10;
+    398.         else if grade=11 then output student_aggregation_g11;
+    399.         else if grade=12 then output student_aggregation_g12;
+    400.         else if grade=13 then output student_aggregation_g13;
+    401.         else if grade=14 then output student_aggregation_g14;
+    402. else if grade=15 then output student_aggregation_g15;
+    403.         else if grade=99 then output student_aggregation_g99;
+      1. That distributes the rows per their grade value to the output DSes
+    404.     run;
+      1. Did run Data at line 395 to create the multiple student_aggregation_g* datasets
+    405.     %let grade_list=10 11 12 13 14 15 99;
+    406.     %local y;
+    407.     %let y=1;
+    408.     %do %while(%scan(&grade_list,&y.) ne); 
+      1. lines 408-420: start y loop over grades
+    409.         %let grade=%scan(&grade_list,&y.);
+      1. Did set current grade
+    410.         %PeerCompare(excel=N, agg_ds=peer_table,agg_file=,agg_sheet=,indata=student_aggregation_g&grade., outdata=District_Peer_&grade.,   
+    411.                 critval = 1.96,
+    412.                 pcdata=similar.similardist);
+      1. Did run PeerCompare for current &grade to produce output DS=District_Peer_&grade 
+      2. Did call PeerCompare to produce one of many Datasets named District_Peer_&grade
+      3. put outdata to District_Peer_&grade.
+      4. Resume - add doc link here 
+    413.         Data District_Peer_&grade.;
+      1. Data step to revise dataset  District_Peer_&grade - add new column with catted  value for g_dcrxid
+    414.             set District_Peer_&grade.;
+    415.             g_dcrxid="&grade._"||strip(dcrxid);
+    416.         run;
+      1. Did run to append to DS District_Peer_&grade the column "g_dcrxid"
+    417.         Proc Append base=peercompare_out data=District_Peer_&grade.;
+      1. this appends to output ds peercompare_out the catted input data from District_Peer_&grade
+    418.         run;
+      1. Did run to append  peercompare_out ...
+      2. We are in a loop over grades, so this Dataset  peercompare_out will append all peer compare results
+    419.         %let y=%eval(&y + 1);
+    420.     %end;
+      1. end y loop of line 408-420 over grade levels 10...99
+      2. now output DS "peercompare_out"  has all data from all grades due to call to Append() in line 417
+    421.     Proc sort data=peercompare_out noduprecs;
+    422.     by g_dcrxid;
+    423.     run;
+      1. did remove dups and sort by g_dcrxid the ds "peercompare_out"
+    424.     %local y;
+    425.     %let y=1;
+    426.     %do %while(%scan(&subject_list,&y.) ne);   
+      1. lines426-432: do y loop through subjects  
+    427.         %let sub_char=%scan(&subject_list,&y.);
+    428.             %let districtds=&districtds ttest_district_&sub_char. cascade_district_&sub_char.;
+      1. set array distrctds items to vars(ds names)  ttest_district_t* and cascade_district*  for this subject.
+    429.         %let schoolds=&schoolds  ttest_school_&sub_char. cascade_school_&sub_char.;
+      1. set array schoolds  to vars  ttest_school_{S} and cascade_school_{S}... over subject in this subject loop
+    430.         %let schoolds2= &schoolds2 cascade_district_&sub_char.;
+      1. append to schoolds2 list  only the var cascade_district_{S} names... because
+    431.           %let y=%eval(&y + 1);
+    432.     %end;
+      1. end lines 426-432:  y loop over subjects at line 426
+      2. Now we  have ds name lists in array vars districtds, schoolds and schoolds2
+    433.      Proc Sql noprint;
+      1. lines 433-439: create table school as subset of columns and rows of DS "output.student", ordered by g_bcrxid.
+    434.             create table school as 
+    435.             select distinct g_bcrxid,g_dcrxid,g_scrxid,bcrxid,bcrxnm,grade,rgrade,schtype
+    436.             from output.student
+    437.             where strip(bcrxid) ne "" and schtype ne "H"
+    438.             order by g_bcrxid;
+    439.         quit;
+      1. lines 433-439: Did Create and  run proc to create narrow table "school" from output_student with bcrxid and non-H schtype, sorted by g_bcrxid (school id)
+    440.         Proc Sql noprint;
+      1. lines 440-446 create outputDS school_intervention subsetted from inputDS output.student
+    441.             create table school_intervention as 
+    442.             select distinct bcrxid_attend,bcrxnm_attend,dcrxid_attend,dcrxnm_attend,scrxid,schtype
+    443.             from output.student
+    444.             where strip(bcrxid_attend) ne "" and schtype ne "H"
+    445.             order by bcrxid_attend;
+    446.         quit;
+      1. lines 440-446: Created narrow ds school_intervention with non-null bcrixid and schtype ne H
+    447.         Proc sort data=student_aggregation(where=(strip(dcrxid) ne "") keep= g_dcrxid g_scrxid dcrxid scrxid dcrxnm grade rgrade distrtype) out=district nodupkey;
+      1. SAS nodupkey: url [http://support.sas.com/kb/5/030.html](http://support.sas.com/kb/5/030.html)
+      2. -This assures no dups of g_dcrxid -- I  guess it keeps the first occurence if more than 1... 
+      3. -So maybe this is how the student_dummy rows are discounted in subsequent processing?
+    448.             by g_dcrxid;
+    449.         run;
+      1. lines 447-448: Created output DS "ds district" (with nodupkey) from input DS "student_aggregation" 
+        1. from student_aggregation with good dcrxid
+    450.         Proc Sql noprint;
+      1. create output DS="state" from inputDS "output.student"
+    451.             create table state  as 
+    452.             select distinct g_scrxid,grade, rgrade
+    453.             from output.student;
+    454.         quit;
+      1. created very narrow 3-column ds "state"  g_scrxid,grade,rgrade...
+    455.         Data output.school_intervention;
+      1. create outputDS "output.school_intervention" from 
+        1. input DS1  'school_intervention' (line 441) (and use indicator inschool variable used for it)
+        2. and input DS2 'mean_bcrxid_attend'
+    456.             merge school_intervention(in=inschool) mean_bcrxid_attend;
+      1. keyword in: 
+    457.             by bcrxid_attend;
+    458.             bcrxid=bcrxid_attend;
+    459.             bcrxnm=bcrxnm_attend;
+    460.             dcrxid=dcrxid_attend;
+    461.             if inschool;
+    462.         run;
+      1. lines 455-462: Rewrote ds output.school_intervention by merge in=inschool
+    463.         Data school_notsuppressed;
+      1. lines 463-467
+      2. create output DS "school_notsuppressed" from input datasets:
+        1. school - created on line 434
+        2. schoolds is array of datasets
+          1. was set on line 429: -
+          2. schoolds=&schoolds  ttest_school_&sub_char. cascade_school_&sub_char.; 
+          3. One set appended every subject.
+        3. -
+    464.             merge school(in=inschool) &schoolds;
+      1. notes on in, in= option 
+        1. -ex-Specify the IN= data set option in parentheses after a SAS data set name in the SET, MERGE, MODIFY, and UPDATE statements only. 
+        2. excerpt-
+          1. Values of  IN= variables are available to program statements during the DATA step, but the variables are not included in the SAS data set that is being created, unless they are assigned to a new variable.
+          2. When you use IN= with BY-group processing, and when a data set contributes an observation for the current BY group, the IN= value is 1. The value remains as long as that BY group is still being processed and the value is not reset by programming logic.
+      2. -
+    465.             by g_bcrxid;
+    466.             if inschool;
+    467.         run;
+      1. lines 463-467: created output ds "school_notsuppressed"  where each has a non-null g_bcrxid.?
+      2. -
+    468.         Proc Sort data=school_notsuppressed;
+    469.             by g_dcrxid;
+    470.         run;
+      1. lines 468-470: resorted dataset school_notsuppressed by g_dcrxid.
+    471.         Data school;
+      1. lines 471-
+      2. Data REWRITE  output DS school- covers through line 493
+    472.             merge school_notsuppressed(in=inschool) &schoolds2.;
+      1. schoolds2 created on line 430 - list of  datasets of cascade-district-data... because...
+    473.             by g_dcrxid;
+    474.              if inschool;
+      1. continue/output only if  DS 'school_notsuppressed' contributed data to the row
+      2. only schools with bcrxid? it seems-- or inschool? 
+    475.             array r_items(*) bprxit1-bprxit50;
+      1. Convenience array: bprxit1-50, FROM datastet/SHEET.. means_table, from sheet of  code line 45.
+      2. See it in excel rows 272 - 321
+    476.             array m_items(*) bpmxit1-bpmxit50;
+    477.             array w_items(*) bpwxit1-bpwxit50;
+    478.             array s_items(*) bpsxit1-bpsxit50;
+    479.             array c_items(*) bpcxit1-bpcxit50;
+      1. more convenience arrays for vars named in Means ds from code line 45 and agg file sheet means.
+      2. these vars are in the means sheet around the middle of the rows:  rows 270-490 or so.
+    480.             %let m=1;
+    481.                 %do %while(%scan(&subject_list,&m) ne);
+      1. lines 480-493: Start m loop through subjects
+    482.                     %let sub_char=%scan(&subject_list,&m);
+    483.                     bp&sub_char.ttest="X";
+      1. set bp{S}ttest to 'X' 
+    484.                     %let i=1;
+    485.                     %do %while(%length(%scan(&&contentstrand_&sub_char.,&i.)));
+      1. lines 484- 491start i loop through content strands
+    486.                         %let cs=%scan(&&contentstrand_&sub_char.,&i);
+      1. set cs to the [i]  contentstrand initial
+    487.                         %If &CS. ne X %then %do;
+      1. CS is a 'real' content strand value (that is, not 'X').
+    488.                             if bp&sub_char.&cs.ccf=1  and dp&sub_char.&cs.ccf in (2,3) then bp&sub_char.ttest="&CS.";
+      1. bp{S}{CS}ccf =1  and db{S}{CS}ccf in (2,3)  - cascade() result output values..
+        1. if here, we set bp{S}_ttest={CS}- content strand  2-char abbrev or 1?.
+        2. Found the var names in sheet 'cascade' - (see sheetreference code line 51)
+        3. They are cascade output variables,
+        4.  eg sheet  row 26 shows bpmaccf,, a  cascade result for , math, strand A.
+        5. -
+      2. So the cascade results 
+      3. so. then .we did set bp{S}.ttest = {CS} (1-letter abbrev)
+    489.                         %end;
+    490.                         %let i = %eval(&i+1);
+    491.                     %end;
+      1. lines 484-491: end i loop through content strands
+    492.                     %let m=%eval(&m + 1);
+    493.                 %end;
+      1. lines 480-493 end - m loop through subjects
+    494.         run;
+      1. Did run data step of line 471, output "School"
+      2. we did set vars bp{S}.ttest={CS} with bp {S} ccf of 1 and dp{S} ccf in (2,3).
+    495.         options Mprint;
+    496.         Data district;
+      1. lines 496-524
+      2. Start data step to output DS "district" covers through line 524
+    497.             merge district(in=indistrict) &districtds peercompare_out;
+    498.             by g_dcrxid;
+      1. We merged several datasets: 
+      2. &districtds is a list mean_g_dcrxid, ttest, peercompare_out... maybe all output datasets for a district... 
+    499.             array r_items(*) dprxit1-dprxit50;
+    500.             array m_items(*) dpmxit1-dpmxit50;
+    501.             array w_items(*) dpwxit1-dpwxit50;
+    502.             array s_items(*) dpsxit1-dpsxit50;
+    503.             array c_items(*) dpcxit1-dpcxit50;
+      1. Did set {S}_items array from sheet Means rows for those vars: rows 51-271
+    504.             %let m=1;
+    505.                 %do %while(%scan(&subject_list,&m) ne);
+      1. lines 505-523: start m loop over subjects
+    506.                     %let sub_char=%scan(&subject_list,&m);
+    507. /*                     %let p=1;*/
+    508. /*                    %do %while(%scan(&&PeerOut_&sub_char.,&p) ne);*/
+    509. /*                        %let var=%scan(&&PeerOut_&sub_char.,&p);*/
+    510. /*                        if dp&sub_char.xscal=. then &var=.;*/
+    511. /*                        %let p=%eval(&p + 1);*/
+    512. /*                    %end;*/
+    513.                     dp&sub_char.ttest="X";
+    514.                     %let i=1;
+    515.                     %do %while(%length(%scan(&&contentstrand_&sub_char.,&i.)));
+    516.                         %let cs=%scan(&&contentstrand_&sub_char.,&i);
+    517.                         %If &CS. ne X %then %do;
+    518.                             if dp&sub_char.&cs.ccf=1 then dp&sub_char.ttest="&CS.";
+    519.                         %end;
+    520.                         %let i = %eval(&i+1);
+    521.                     %end;
+    522.                     %let m=%eval(&m + 1);
+    523.                 %end;
+      1. lines 505-523: end m loop over subjects
+    524.             if indistrict;
+    525.         run;
+      1. lines 496-525 end Data district 
+      2. Created rows, each row with item-means for all subject-items per district, presumably
+      3. Did set dp_{S}.ttest to CS abbrev if db{S}{C}.ccf  = 1...  because.. 
+    526.         Data state1(drop=tmp:);
+      1. loop lines 526-558: start Data state1
+    527.             merge state(in=instate) mean_g_scrxid;
+      1.  mean_g_scrxid is output file/dataset that was genned by call to Means() on line 390.
+      2. merge syntax  .. [http://support.sas.com/documentation/cdl/en/lestmtsref/63323/HTML/default/viewer.htm#n1i8w2bwu1fn5kn1gpxj18xttbb0.htm](http://support.sas.com/documentation/cdl/en/lestmtsref/63323/HTML/default/viewer.htm#n1i8w2bwu1fn5kn1gpxj18xttbb0.htm)
+    528.             by g_scrxid;
+    529.             retain tmpsprxit1-tmpsprxit50 tmpspmxit1-tmpspmxit50 tmpspwxit1-tmpspwxit50 tmpspsxit1-tmpspsxit50 tmpspcxit1-tmpspcxit50;
+      1. NOTE: the tmp* varnames are genned  where? Have not deciphered means.sas yet....
+      2. The tmp*varnames are named in the agg sheet MEANS without the "tmp_" prefix...(means sheet rows 492 - 711)
+      3. NOTE: vars named sprxit* and the rest are in the Means_table or sheet... not sure where the tmp prefix originates...
+    530.             array r_items(*) sprxit1-sprxit50;
+    531.             array m_items(*) spmxit1-spmxit50;
+    532.             array w_items(*) spwxit1-spwxit50;
+    533.             array s_items(*) spsxit1-spsxit50;
+    534.             array c_items(*) spcxit1-spcxit50;
+    535.             array tmp_r_items(*) tmpsprxit1-tmpsprxit50;
+    536.             array tmp_m_items(*) tmpspmxit1-tmpspmxit50;
+    537.             array tmp_w_items(*) tmpspwxit1-tmpspwxit50;
+    538.             array tmp_s_items(*) tmpspsxit1-tmpspsxit50;
+    539.             array tmp_c_items(*) tmpspcxit1-tmpspcxit50;
+    540.             if grade=10 then do;
+    541.                 do i= 1 to 50;
+    542.                     tmp_r_items[i]=r_items[i];
+    543.                     tmp_m_items[i]=m_items[i];
+    544.                     tmp_w_items[i]=w_items[i];
+    545.                     tmp_s_items[i]=s_items[i];
+    546.                     tmp_c_items[i]=c_items[i];
+    547.                 end;
+    548.             end;
+    549.             else do;
+    550.                 do i= 1 to 50;
+    551.                     r_items[i]= tmp_r_items[i];
+    552.                     m_items[i]= tmp_m_items[i];
+    553.                     w_items[i]= tmp_w_items[i];
+    554.                     s_items[i]= tmp_s_items[i];
+    555.                    c_items[i]= tmp_c_items[i];
+    556.                 end;
+    557.             END;
+    558.             if instate;
+    559.         run;
+      1. did data step at line 526 for output DS state1 to create various normalized array names.
+    560.         %Suppression(excel=N,agg_ds=supp_district,agg_file=,agg_sheet=,inputds=district, outputds=output.District)
+      1. agg_ds is input SPEC "supp_district" here, from line 53, from agg file sheet suppression_district.
+      2. data input DS is 'district', from line 496.
+      3. outputds is output.District
+      4. this applies all the conditonal settings in the agg workbook sheet 'suppression_district' to produce the output dataset = "output.District"
+    561.         %Suppression(excel=N,agg_ds=supp_state,agg_file=,agg_sheet=,inputds=state1, outputds=output.State)
+      1. input SPEC ds agg_ds from agg file, sheet suppression_state line 54
+      2. input DS is state1 from line 526
+      3. output DS is output.State
+      4. This applies all the conditonal settings in the agg workbook sheet 'suppression_state' to produce the output dataset = "output.State"
+    562.         %Suppression(excel=N,agg_ds=supp_school,agg_file=,agg_sheet=,inputds=school, outputds=output.school)
+      1. input agg ds=supp_school, inputds="school"
+      2. inputds is Data school from line 471
+      3. output DS is output.school .
+      4. This applies all the conditonal settings in the agg workbook sheet 'suppression_school' to produce the output dataset = "output.Stateschool"
+    563. %mend;
+      1. end macro OGT... started at line 57
+    564. /*Data OGT;*/
+    565. /*set input.ogt;*/
+    566. /*if ufxx_SAMPLE=1;*/
+    567. /*run;*/
+    568. /**/
+    569. /*proc freq data=input.ogt;*/
+    570. /*tables ufxx_sample/list;*/
+    571. /*run;*/
+    572. %OGT(inputds=input.ogt);
+      1. Did run macro OGT
+      2. -
+    573. Proc printto;
+    574. run;

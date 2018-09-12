@@ -1,0 +1,8 @@
+checktype,variable,labelvariable,note
+NonMissing,[lithocode],,
+NonMissing,[nonmissing_fail],,
+UniqueKey,[lithocode],,
+UniqueKey,[unique_fail],,
+UniqueLabel,[bcrxid_attend],[dcrxnm_home],
+UniqueLabel,[unique_ids],[labels1],
+UniqueLabel,[unique_ids],[labels2_fail],

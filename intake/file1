@@ -1,0 +1,3 @@
+
+for each in open('c:/sas/ogt/originial.txt','r'):
+	print each
